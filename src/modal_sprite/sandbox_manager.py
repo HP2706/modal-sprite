@@ -14,7 +14,7 @@ from modal.secret import Secret
 from modal_sprite.config import SpriteConfig
 from modal_sprite.sprite_ctl import get_sprite_ctl_source
 
-SPRITE_CTL_PATH = "/usr/local/bin/modal-modal-sprite-ctl"
+SPRITE_CTL_PATH = "/usr/local/bin/modal-sprite-ctl"
 
 # Base image with modal, Node.js, Claude Code, and Codex pre-installed
 _BASE_IMAGE: Image | None = None

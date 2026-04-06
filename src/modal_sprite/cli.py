@@ -4,6 +4,7 @@ import asyncio
 import json
 from typing import Optional
 
+import modal
 import typer
 
 from modal_sprite.config import SpriteConfig
@@ -17,7 +18,8 @@ app = typer.Typer(
 
 
 def _run(coro: object) -> object:
-    return asyncio.run(coro)  # type: ignore[arg-type]
+    with modal.enable_output():
+        return asyncio.run(coro)  # type: ignore[arg-type]
 
 
 @app.command()
