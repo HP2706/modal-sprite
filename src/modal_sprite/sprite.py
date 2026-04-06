@@ -15,7 +15,7 @@ from modal_sprite.config import SpriteConfig
 from modal_sprite.errors import SpriteNotFoundError, SpriteStateError
 from modal_sprite.monitor import SpriteMonitor
 from modal_sprite.registry import SpriteRegistry
-from modal_sprite.state import SpriteMetadata, SpriteState
+from modal_sprite.state import CheckpointInfo, SpriteMetadata, SpriteState
 from modal_sprite.terminal import run_shell_loop
 
 logger = logging.getLogger(__name__)
@@ -198,6 +198,27 @@ class Sprite:
 
         self._start_monitor()
         logger.info("Sprite '%s' is now awake (sandbox: %s)", self._name, sandbox.object_id)
+
+    async def restore(self, label: str) -> None:
+        """Restore to a named checkpoint version."""
+        checkpoint = self._metadata.checkpoints.get(label)
+        if checkpoint is None:
+            available = ", ".join(self._metadata.checkpoints.keys()) or "(none)"
+            raise ValueError(f"Checkpoint '{label}' not found. Available: {available}")
+
+        # Terminate current sandbox if running
+        if self._sandbox is not None:
+            self._stop_monitor()
+            await sm.terminate_sandbox(self._sandbox)
+            self._sandbox = None
+
+        # Set checkpoint as restore target and wake from it
+        self._metadata.latest_snapshot_image_id = checkpoint.image_id
+        self._metadata.state = SpriteState.SLEEPING
+        self._metadata.sandbox_id = None
+        await self._registry.put(self._name, self._metadata)
+
+        await self.wake()
 
     async def push(self, local_path: str, remote_path: str) -> None:
         """Upload a local file into the sprite's sandbox."""

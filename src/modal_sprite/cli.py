@@ -56,12 +56,18 @@ def create(
 
 
 @app.command()
-def shell(name: str = typer.Argument(help="Sprite name")) -> None:
+def shell(
+    name: str = typer.Argument(help="Sprite name"),
+    version: Optional[str] = typer.Option(None, help="Checkpoint version to restore into"),
+) -> None:
     """Open an interactive shell. Wakes the sprite if sleeping."""
 
     async def _do() -> None:
         sprite = await Sprite.get(name)
-        if sprite.status == "sleeping":
+        if version:
+            typer.echo(f"Restoring sprite '{name}' to checkpoint '{version}'...")
+            await sprite.restore(version)
+        elif sprite.status == "sleeping":
             typer.echo(f"Waking sprite '{name}'...")
             await sprite.wake()
         await sprite.shell()
@@ -165,8 +171,14 @@ def checkpoint(
 
         sprite = await Sprite.get(name)
         assert sprite._sandbox is not None, "Sprite must be running"
+        from datetime import datetime, timezone
+        from modal_sprite.state import CheckpointInfo
+
         image = await sm.snapshot_sandbox(sprite._sandbox)
-        sprite._metadata.checkpoints[label] = image.object_id
+        sprite._metadata.checkpoints[label] = CheckpointInfo(
+            image_id=image.object_id,
+            created_at=datetime.now(tz=timezone.utc).isoformat(),
+        )
         sprite._metadata.latest_snapshot_image_id = image.object_id
         await sprite._registry.put(name, sprite._metadata)
 
@@ -174,15 +186,24 @@ def checkpoint(
     typer.echo(f"Checkpoint '{label}' created for sprite '{name}'.")
 
 
+def _fmt_time(iso: str) -> str:
+    """Format ISO timestamp for display."""
+    if not iso:
+        return ""
+    return iso[:19].replace("T", " ")
+
+
 @app.command("list")
 def list_sprites() -> None:
-    """List all sprites."""
+    """List all sprites and their checkpoint versions."""
     sprites = Sprite.list_all_sync()
     if not sprites:
         typer.echo("No sprites found.")
         return
     for sname, meta in sprites.items():
-        typer.echo(f"  {sname:20s}  {meta.state:10s}  created={meta.created_at}")
+        typer.echo(f"  {sname:20s}  {meta.state:10s}  {_fmt_time(meta.created_at)}")
+        for label, cp in meta.checkpoints.items():
+            typer.echo(f"    {label:18s}              {_fmt_time(cp.created_at)}")
 
 
 @app.command()

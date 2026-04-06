@@ -70,12 +70,19 @@ def checkpoint(label: str = typer.Argument(help="Name for the checkpoint")) -> N
     sb = modal.Sandbox.from_id(sandbox_id)
     image = sb.snapshot_filesystem(timeout=120)
 
-    meta["checkpoints"][label] = image.object_id
+    meta["checkpoints"][label] = {"image_id": image.object_id, "created_at": _now()}
     meta["latest_snapshot_image_id"] = image.object_id
     meta["last_activity_at"] = _now()
     _save_metadata(reg, name, meta)
 
     typer.echo(f"Checkpoint '{label}' saved. (image: {image.object_id})")
+
+
+def _cp_image_id(cp: object) -> str:
+    """Extract image_id from checkpoint (handles legacy str and new dict format)."""
+    if isinstance(cp, dict):
+        return cp["image_id"]
+    return cp
 
 
 @app.command()
@@ -89,8 +96,12 @@ def checkpoints() -> None:
     if not cps:
         typer.echo("No checkpoints.")
         return
-    for cp_label, image_id in cps.items():
-        typer.echo(f"  {cp_label:20s}  {image_id}")
+    for cp_label, cp in cps.items():
+        if isinstance(cp, dict):
+            created = cp.get("created_at", "")[:19].replace("T", " ")
+            typer.echo(f"  {cp_label:20s}  {created:22s}  {cp['image_id']}")
+        else:
+            typer.echo(f"  {cp_label:20s}  {'':22s}  {cp}")
 
 
 @app.command()
@@ -184,7 +195,7 @@ def restore(label: str = typer.Argument(help="Checkpoint label to restore")) -> 
         typer.echo(f"Error: checkpoint '{label}' not found. Available: {available}", err=True)
         raise typer.Exit(1)
 
-    meta["latest_snapshot_image_id"] = cps[label]
+    meta["latest_snapshot_image_id"] = _cp_image_id(cps[label])
     meta["pending_action"] = "reconnect"
     meta["last_activity_at"] = _now()
     _save_metadata(reg, name, meta)

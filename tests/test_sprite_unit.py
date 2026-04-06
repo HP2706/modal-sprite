@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from modal_sprite.config import SpriteConfig
 from modal_sprite.errors import SpriteNotFoundError, SpriteStateError
-from modal_sprite.state import SpriteMetadata, SpriteState
+from modal_sprite.state import CheckpointInfo, SpriteMetadata, SpriteState
 
 
 # -- SpriteConfig ----------------------------------------------------------
@@ -64,7 +64,7 @@ class TestSpriteMetadata:
             name="test",
             state=SpriteState.SLEEPING,
             latest_snapshot_image_id="img-123",
-            checkpoints={"v1": "img-100"},
+            checkpoints={"v1": CheckpointInfo(image_id="img-100", created_at="2026-04-06T00:30:00Z")},
             pending_action="reconnect",
             config=SpriteConfig(gpu="A100", memory=16384),
             created_at="2026-04-06T00:00:00Z",
@@ -75,11 +75,24 @@ class TestSpriteMetadata:
         assert restored == meta
         assert restored.config.gpu == "A100"
         assert restored.pending_action == "reconnect"
+        assert restored.checkpoints["v1"].image_id == "img-100"
+        assert restored.checkpoints["v1"].created_at == "2026-04-06T00:30:00Z"
 
     def test_checkpoints_mutable(self) -> None:
         meta = SpriteMetadata(name="x", state=SpriteState.RUNNING)
-        meta.checkpoints["v1"] = "img-abc"
+        meta.checkpoints["v1"] = CheckpointInfo(image_id="img-abc")
         assert "v1" in meta.checkpoints
+        assert meta.checkpoints["v1"].image_id == "img-abc"
+
+    def test_legacy_checkpoint_migration(self) -> None:
+        """Old format {label: image_id_str} should be migrated to CheckpointInfo."""
+        meta = SpriteMetadata.model_validate({
+            "name": "old",
+            "state": "running",
+            "checkpoints": {"v1": "img-legacy"},
+        })
+        assert isinstance(meta.checkpoints["v1"], CheckpointInfo)
+        assert meta.checkpoints["v1"].image_id == "img-legacy"
 
 
 # -- Errors -----------------------------------------------------------------

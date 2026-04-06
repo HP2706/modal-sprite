@@ -14,7 +14,7 @@ from modal_sprite import sandbox_manager as sm
 from modal_sprite.config import SpriteConfig
 from modal_sprite.registry import SpriteRegistry
 from modal_sprite.sprite import Sprite
-from modal_sprite.state import SpriteState
+from modal_sprite.state import CheckpointInfo, SpriteState
 
 pytestmark = pytest.mark.integration
 
@@ -102,7 +102,7 @@ async def test_clone() -> None:
     await proc.wait.aio()
     image = await sm.snapshot_sandbox(sprite._sandbox)
     sprite._metadata.latest_snapshot_image_id = image.object_id
-    sprite._metadata.checkpoints["v1"] = image.object_id
+    sprite._metadata.checkpoints["v1"] = CheckpointInfo(image_id=image.object_id)
     await sprite._registry.put(name, sprite._metadata)
 
     # Clone
@@ -228,7 +228,7 @@ async def test_sprite_ctl_restore_sets_reconnect() -> None:
     await proc.wait.aio()
 
     meta = await sprite._registry.get(name)
-    v1_image_id = meta.checkpoints["v1"]
+    v1_image_id = meta.checkpoints["v1"].image_id
 
     # Write something new after checkpoint
     proc = await sprite._sandbox.exec.aio("bash", "-c", "echo 'new' > /root/new.txt")
