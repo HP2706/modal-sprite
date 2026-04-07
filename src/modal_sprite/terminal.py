@@ -12,14 +12,47 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 
 from modal import Image
 
 from modal_sprite import sandbox_manager as sm
+from modal_sprite.monitor import SpriteMonitor
 from modal_sprite.registry import SpriteRegistry
 from modal_sprite.state import SpriteState
 
 logger = logging.getLogger(__name__)
+
+
+def _make_shell_monitor(
+    sandbox: object,
+    timeout: int,
+    registry: SpriteRegistry,
+    sprite_name: str,
+    started_at: float,
+) -> SpriteMonitor:
+    """Create a snapshot-only monitor for use during an interactive shell.
+
+    The on_expiry callback is a no-op because the shell loop handles
+    sandbox death and reconnection itself.
+    """
+
+    def _on_snapshot(image: Image) -> None:
+        meta = registry.get_sync(sprite_name)
+        if meta is not None:
+            meta.latest_snapshot_image_id = image.object_id
+            registry.put_sync(sprite_name, meta)
+
+    def _on_expiry() -> None:
+        logger.info("[shell-monitor] Sandbox timeout reached for '%s'", sprite_name)
+
+    return SpriteMonitor(
+        sandbox=sandbox,
+        timeout=timeout,
+        on_snapshot=_on_snapshot,
+        on_expiry=_on_expiry,
+        started_at=started_at,
+    )
 
 
 async def run_shell_loop(
@@ -39,9 +72,11 @@ async def run_shell_loop(
         if metadata.state == SpriteState.SLEEPING:
             assert metadata.latest_snapshot_image_id is not None
             image = Image.from_id(metadata.latest_snapshot_image_id)
+            sandbox_started_at = time.time()
             sandbox = await sm.create_sandbox(app, metadata.config, image=image)
             metadata.state = SpriteState.RUNNING
             metadata.sandbox_id = sandbox.object_id
+            metadata.sandbox_started_at = sandbox_started_at
             metadata.pending_action = None
             await registry.put(sprite_name, metadata)
         else:
@@ -53,9 +88,11 @@ async def run_shell_loop(
                 if metadata.latest_snapshot_image_id:
                     print("Sandbox died, restoring from last snapshot...")
                     image = Image.from_id(metadata.latest_snapshot_image_id)
+                    sandbox_started_at = time.time()
                     sandbox = await sm.create_sandbox(app, metadata.config, image=image)
                     metadata.state = SpriteState.RUNNING
                     metadata.sandbox_id = sandbox.object_id
+                    metadata.sandbox_started_at = sandbox_started_at
                     metadata.pending_action = None
                     await registry.put(sprite_name, metadata)
                 else:
@@ -70,6 +107,17 @@ async def run_shell_loop(
             "SPRITE_SANDBOX_ID": sandbox.object_id,
         }
 
+        # Start a snapshot-only monitor during the interactive session
+        meta_for_monitor = await registry.get(sprite_name)
+        monitor = _make_shell_monitor(
+            sandbox=sandbox,
+            timeout=meta_for_monitor.config.timeout if meta_for_monitor else 3600,
+            registry=registry,
+            sprite_name=sprite_name,
+            started_at=meta_for_monitor.sandbox_started_at or time.time(),
+        )
+        monitor.start()
+
         # Open interactive PTY shell
         process = await sandbox.exec.aio(
             "bash",
@@ -77,6 +125,9 @@ async def run_shell_loop(
             env=env,
         )
         await process.attach.aio()
+
+        # Stop the monitor now that the shell has exited
+        monitor.stop()
 
         # Shell exited -- check registry for pending action
         metadata = await registry.get(sprite_name)
@@ -91,10 +142,12 @@ async def run_shell_loop(
             # Create a new one from the latest snapshot + updated config.
             assert metadata.latest_snapshot_image_id is not None
             image = Image.from_id(metadata.latest_snapshot_image_id)
+            sandbox_started_at = time.time()
             sandbox = await sm.create_sandbox(app, metadata.config, image=image)
 
             metadata.state = SpriteState.RUNNING
             metadata.sandbox_id = sandbox.object_id
+            metadata.sandbox_started_at = sandbox_started_at
             metadata.pending_action = None
             await registry.put(sprite_name, metadata)
 
@@ -107,8 +160,22 @@ async def run_shell_loop(
             return
 
         # Normal exit (user typed 'exit' or Ctrl-D).
-        # Sprite stays running, shell just disconnects.
-        print(f"Disconnected. Sprite '{sprite_name}' is still running.")
-        print(f"  Reconnect:  modal-sprite shell {sprite_name}")
-        print(f"  Sleep:      modal-sprite sleep {sprite_name}")
+        # Verify the sandbox is actually still alive before claiming it's running.
+        still_alive = await sandbox.poll.aio() is None
+        if still_alive:
+            print(f"Disconnected. Sprite '{sprite_name}' is still running.")
+            print(f"  Reconnect:  modal-sprite shell {sprite_name}")
+            print(f"  Sleep:      modal-sprite sleep {sprite_name}")
+        else:
+            # Sandbox died while we were attached
+            if metadata.latest_snapshot_image_id:
+                print(f"Sandbox for '{sprite_name}' terminated. Last snapshot is preserved.")
+                metadata.state = SpriteState.SLEEPING
+                metadata.sandbox_id = None
+                await registry.put(sprite_name, metadata)
+            else:
+                print(f"Sandbox for '{sprite_name}' terminated with no snapshot.", file=sys.stderr)
+                metadata.state = SpriteState.SLEEPING
+                metadata.sandbox_id = None
+                await registry.put(sprite_name, metadata)
         return
