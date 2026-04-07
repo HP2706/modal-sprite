@@ -26,6 +26,7 @@ class SpriteMetadata(BaseModel):
     name: str
     state: SpriteState
     sandbox_id: str | None = None
+    sandbox_started_at: float | None = None
     base_image_id: str | None = None
     latest_snapshot_image_id: str | None = None
     checkpoints: dict[str, CheckpointInfo] = Field(default_factory=dict)

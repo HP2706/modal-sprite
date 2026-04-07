@@ -33,10 +33,12 @@ class SpriteMonitor:
         timeout: int,
         on_snapshot: Callable[[Image], None],
         on_expiry: Callable[[], None],
+        *,
+        started_at: float | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._timeout = timeout
-        self._creation_time = time.time()
+        self._started_at = started_at or time.time()
         self._on_snapshot = on_snapshot
         self._on_expiry = on_expiry
         self._stop_event = threading.Event()
@@ -62,7 +64,7 @@ class SpriteMonitor:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            elapsed = time.time() - self._creation_time
+            elapsed = time.time() - self._started_at
             remaining = self._timeout - elapsed
 
             # Snapshot window: [SNAPSHOT_SECONDS - 1, SNAPSHOT_SECONDS + 1]
