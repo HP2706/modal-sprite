@@ -69,6 +69,7 @@ async def create_sandbox(
         app=app,
         image=base_image,
         timeout=config.timeout,
+        idle_timeout=config.idle_timeout,
         cpu=config.cpu,
         memory=config.memory,
         gpu=config.gpu,

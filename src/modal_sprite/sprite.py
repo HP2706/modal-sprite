@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +62,7 @@ class Sprite:
         if base_image_id:
             image = Image.from_id(base_image_id)
 
+        sandbox_started_at = time.time()
         sandbox = await sm.create_sandbox(app, cfg, image=image, sprite_name=name)
 
         now = _now()
@@ -68,6 +70,7 @@ class Sprite:
             name=name,
             state=SpriteState.RUNNING,
             sandbox_id=sandbox.object_id,
+            sandbox_started_at=sandbox_started_at,
             base_image_id=base_image_id,
             config=cfg,
             created_at=now,
@@ -186,6 +189,7 @@ class Sprite:
         )
 
         image = Image.from_id(self._metadata.latest_snapshot_image_id)
+        sandbox_started_at = time.time()
         sandbox = await sm.create_sandbox(
             self._app, self._metadata.config, image=image, sprite_name=self._name,
         )
@@ -193,6 +197,7 @@ class Sprite:
         self._sandbox = sandbox
         self._metadata.state = SpriteState.RUNNING
         self._metadata.sandbox_id = sandbox.object_id
+        self._metadata.sandbox_started_at = sandbox_started_at
         self._metadata.last_activity_at = _now()
         await self._registry.put(self._name, self._metadata)
 
@@ -241,6 +246,7 @@ class Sprite:
         assert not await registry.exists(new_name), f"Sprite '{new_name}' already exists"
 
         image = Image.from_id(self._metadata.latest_snapshot_image_id)
+        sandbox_started_at = time.time()
         sandbox = await sm.create_sandbox(
             self._app, self._metadata.config, image=image, sprite_name=new_name,
         )
@@ -250,6 +256,7 @@ class Sprite:
             name=new_name,
             state=SpriteState.RUNNING,
             sandbox_id=sandbox.object_id,
+            sandbox_started_at=sandbox_started_at,
             base_image_id=self._metadata.base_image_id,
             latest_snapshot_image_id=self._metadata.latest_snapshot_image_id,
             config=self._metadata.config.model_copy(),
@@ -258,13 +265,15 @@ class Sprite:
         )
         await registry.put(new_name, new_metadata)
 
-        return Sprite(
+        clone = Sprite(
             _name=new_name,
             _metadata=new_metadata,
             _registry=registry,
             _app=self._app,
             _sandbox=sandbox,
         )
+        clone._start_monitor()
+        return clone
 
     async def destroy(self) -> None:
         """Permanently destroy the sprite and all its state."""
@@ -290,6 +299,7 @@ class Sprite:
             timeout=self._metadata.config.timeout,
             on_snapshot=self._on_monitor_snapshot,
             on_expiry=self._on_monitor_expiry,
+            started_at=self._metadata.sandbox_started_at,
         )
         self._monitor.start()
 
