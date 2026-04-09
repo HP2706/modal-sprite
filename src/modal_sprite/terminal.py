@@ -1,7 +1,7 @@
-"""Interactive shell session with reconnect-on-pending-action loop.
+"""Interactive attach session with reconnect-on-pending-action loop.
 
 The host-side terminal handler:
-1. Opens an interactive PTY shell on the sandbox via ``process.attach()``
+1. Attaches to an interactive PTY shell on the sandbox via ``process.attach()``
 2. When the shell exits or the sandbox dies, checks the registry
 3. If ``pending_action == "reconnect"``, creates a new sandbox from the
    latest snapshot + updated config and loops back to step 1
@@ -24,16 +24,16 @@ from modal_sprite.state import SpriteState
 logger = logging.getLogger(__name__)
 
 
-def _make_shell_monitor(
+def _make_attach_monitor(
     sandbox: object,
     timeout: int,
     registry: SpriteRegistry,
     sprite_name: str,
     started_at: float,
 ) -> SpriteMonitor:
-    """Create a snapshot-only monitor for use during an interactive shell.
+    """Create a snapshot-only monitor for use during an interactive attach session.
 
-    The on_expiry callback is a no-op because the shell loop handles
+    The on_expiry callback is a no-op because the attach loop handles
     sandbox death and reconnection itself.
     """
 
@@ -44,7 +44,7 @@ def _make_shell_monitor(
             registry.put_sync(sprite_name, meta)
 
     def _on_expiry() -> None:
-        logger.info("[shell-monitor] Sandbox timeout reached for '%s'", sprite_name)
+        logger.info("[attach-monitor] Sandbox timeout reached for '%s'", sprite_name)
 
     return SpriteMonitor(
         sandbox=sandbox,
@@ -55,14 +55,14 @@ def _make_shell_monitor(
     )
 
 
-async def run_shell_loop(
+async def run_attach_loop(
     sprite_name: str,
     registry: SpriteRegistry,
     app: object,
 ) -> None:
-    """Run the interactive shell with automatic reconnection.
+    """Run the interactive attach session with automatic reconnection.
 
-    This is the core loop that ``sprite create``, ``sprite shell``, etc. call.
+    This is the core loop that ``sprite create``, ``sprite attach``, etc. call.
     """
     while True:
         metadata = await registry.get(sprite_name)
@@ -109,7 +109,7 @@ async def run_shell_loop(
 
         # Start a snapshot-only monitor during the interactive session
         meta_for_monitor = await registry.get(sprite_name)
-        monitor = _make_shell_monitor(
+        monitor = _make_attach_monitor(
             sandbox=sandbox,
             timeout=meta_for_monitor.config.timeout if meta_for_monitor else 3600,
             registry=registry,
@@ -164,7 +164,7 @@ async def run_shell_loop(
         still_alive = await sandbox.poll.aio() is None
         if still_alive:
             print(f"Disconnected. Sprite '{sprite_name}' is still running.")
-            print(f"  Reconnect:  modal-sprite shell {sprite_name}")
+            print(f"  Reattach:   modal-sprite attach {sprite_name}")
             print(f"  Sleep:      modal-sprite sleep {sprite_name}")
         else:
             # Sandbox died while we were attached

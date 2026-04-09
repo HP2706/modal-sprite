@@ -209,16 +209,16 @@ class TestIdleTimeoutPassthrough:
 
 
 # ---------------------------------------------------------------------------
-# Finding 1: Shell monitor runs during interactive session
+# Finding 1: Attach monitor runs during interactive session
 # ---------------------------------------------------------------------------
 
 
-class TestShellMonitor:
-    """Verify _make_shell_monitor creates a working snapshot-only monitor."""
+class TestAttachMonitor:
+    """Verify _make_attach_monitor creates a working snapshot-only monitor."""
 
-    def test_make_shell_monitor_creates_monitor(self) -> None:
-        """_make_shell_monitor returns a SpriteMonitor that can start/stop."""
-        from modal_sprite.terminal import _make_shell_monitor
+    def test_make_attach_monitor_creates_monitor(self) -> None:
+        """_make_attach_monitor returns a SpriteMonitor that can start/stop."""
+        from modal_sprite.terminal import _make_attach_monitor
 
         mock_registry = MagicMock()
         mock_registry.get_sync.return_value = SpriteMetadata(
@@ -227,7 +227,7 @@ class TestShellMonitor:
             sandbox_id="sb-1",
         )
 
-        monitor = _make_shell_monitor(
+        monitor = _make_attach_monitor(
             sandbox=MagicMock(),
             timeout=3600,
             registry=mock_registry,
@@ -240,9 +240,9 @@ class TestShellMonitor:
         time.sleep(0.2)
         monitor.stop()
 
-    def test_shell_monitor_snapshots_update_registry(self) -> None:
-        """When shell monitor takes a snapshot, it updates the registry."""
-        from modal_sprite.terminal import _make_shell_monitor
+    def test_attach_monitor_snapshots_update_registry(self) -> None:
+        """When attach monitor takes a snapshot, it updates the registry."""
+        from modal_sprite.terminal import _make_attach_monitor
 
         fake_image = MagicMock()
         fake_image.object_id = "img-shell-snap"
@@ -259,7 +259,7 @@ class TestShellMonitor:
 
         # Position time so snapshot fires immediately (remaining ~30s)
         started_at = time.time() - 70  # 100s timeout, 70s elapsed => 30s remaining
-        monitor = _make_shell_monitor(
+        monitor = _make_attach_monitor(
             sandbox=fake_sandbox,
             timeout=100,
             registry=mock_registry,
@@ -275,15 +275,15 @@ class TestShellMonitor:
         saved_meta = mock_registry.put_sync.call_args[0][1]
         assert saved_meta.latest_snapshot_image_id == "img-shell-snap"
 
-    def test_shell_monitor_expiry_is_noop(self) -> None:
-        """Shell monitor's on_expiry should not update registry state."""
-        from modal_sprite.terminal import _make_shell_monitor
+    def test_attach_monitor_expiry_is_noop(self) -> None:
+        """Attach monitor's on_expiry should not update registry state."""
+        from modal_sprite.terminal import _make_attach_monitor
 
         mock_registry = MagicMock()
 
         # Already expired
         started_at = time.time() - 3601
-        monitor = _make_shell_monitor(
+        monitor = _make_attach_monitor(
             sandbox=MagicMock(),
             timeout=3600,
             registry=mock_registry,
@@ -306,12 +306,12 @@ class TestShellMonitor:
 
 
 class TestTerminalStateReporting:
-    """Verify run_shell_loop checks sandbox liveness on normal exit."""
+    """Verify run_attach_loop checks sandbox liveness on normal exit."""
 
     @pytest.mark.asyncio
     async def test_reports_terminated_when_sandbox_dead(self, capsys: pytest.CaptureFixture[str]) -> None:
         """When sandbox.poll() returns non-None (dead), terminal should report termination."""
-        from modal_sprite.terminal import run_shell_loop
+        from modal_sprite.terminal import run_attach_loop
 
         meta = SpriteMetadata(
             name="test-sprite",
@@ -342,7 +342,7 @@ class TestTerminalStateReporting:
             mock_monitor_instance = MagicMock()
             MockMonitor.return_value = mock_monitor_instance
 
-            await run_shell_loop("test-sprite", mock_registry, MagicMock())
+            await run_attach_loop("test-sprite", mock_registry, MagicMock())
 
         captured = capsys.readouterr()
         assert "terminated" in captured.out.lower()
@@ -355,7 +355,7 @@ class TestTerminalStateReporting:
     @pytest.mark.asyncio
     async def test_reports_running_when_sandbox_alive(self, capsys: pytest.CaptureFixture[str]) -> None:
         """When sandbox.poll() returns None (alive), terminal should report still running."""
-        from modal_sprite.terminal import run_shell_loop
+        from modal_sprite.terminal import run_attach_loop
 
         meta = SpriteMetadata(
             name="test-sprite",
@@ -385,7 +385,7 @@ class TestTerminalStateReporting:
             mock_monitor_instance = MagicMock()
             MockMonitor.return_value = mock_monitor_instance
 
-            await run_shell_loop("test-sprite", mock_registry, MagicMock())
+            await run_attach_loop("test-sprite", mock_registry, MagicMock())
 
         captured = capsys.readouterr()
         assert "still running" in captured.out.lower()

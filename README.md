@@ -66,11 +66,11 @@ Requires a [Modal](https://modal.com) account with `modal token set` configured.
 ### CLI
 
 ```bash
-# Create a sprite and drop into a shell
+# Create a sprite and attach to its shell
 modal-sprite create my-dev-box
 
-# Reconnect to a running sprite
-modal-sprite shell my-dev-box
+# Reattach to a running sprite
+modal-sprite attach my-dev-box
 
 # Sleep (stops billing, preserves state)
 modal-sprite sleep my-dev-box
@@ -126,8 +126,8 @@ sprite = await Sprite.create("my-box", config=SpriteConfig(
     cpu=4, memory=8192, gpu="T4", timeout=7200
 ))
 
-# Interactive shell
-await sprite.shell()
+# Attach to interactive shell
+await sprite.attach()
 
 # Sleep / wake
 await sprite.sleep()
@@ -163,7 +163,7 @@ You can also start from a custom base image via `--base-image-id`.
 | Sleep / wake | First-class, ~1s wake | Via `snapshot_filesystem()`, ~5-10s wake |
 | Checkpoints | Built-in | Named snapshots stored in `modal.Dict` |
 | Live upgrade | Not yet | `modal-sprite-ctl upgrade` |
-| Interactive shell | `fly sprite shell` | `modal-sprite shell` (PTY via `process.attach()`) |
+| Interactive shell | `fly sprite shell` | `modal-sprite attach` (PTY via `process.attach()`) |
 | Billing | Paused when sleeping | Zero cost when sleeping (sandbox terminated) |
 | GPU support | Limited | Full Modal GPU catalog (T4, A10G, A100, H100, ...) |
 | In-sandbox control | `sprite-ctl` | `modal-sprite-ctl` |

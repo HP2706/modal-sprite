@@ -1,4 +1,4 @@
-"""CLI for modal-sprite -- shell-first persistent cloud computers."""
+"""CLI for modal-sprite -- attach-first persistent cloud computers."""
 
 import asyncio
 import json
@@ -32,9 +32,9 @@ def create(
     idle_timeout: int = typer.Option(300, help="Idle timeout in seconds"),
     workdir: str = typer.Option("/root", help="Working directory"),
     base_image_id: Optional[str] = typer.Option(None, help="Base image ID to start from"),
-    detach: bool = typer.Option(False, help="Create without opening a shell"),
+    detach: bool = typer.Option(False, help="Create without attaching to a shell"),
 ) -> None:
-    """Create a new sprite and drop into an interactive shell."""
+    """Create a new sprite and attach to an interactive shell."""
     cfg = SpriteConfig(
         cpu=cpu,
         memory=memory,
@@ -50,17 +50,17 @@ def create(
             typer.echo(f"Sprite '{name}' created (sandbox: {sprite._metadata.sandbox_id})")
             return
         typer.echo(f"Sprite '{name}' created. Connecting...")
-        await sprite.shell()
+        await sprite.attach()
 
     _run(_do())
 
 
 @app.command()
-def shell(
+def attach(
     name: str = typer.Argument(help="Sprite name"),
     version: Optional[str] = typer.Option(None, help="Checkpoint version to restore into"),
 ) -> None:
-    """Open an interactive shell. Wakes the sprite if sleeping."""
+    """Attach to a sprite's interactive shell. Wakes the sprite if sleeping."""
 
     async def _do() -> None:
         sprite = await Sprite.get(name)
@@ -70,7 +70,7 @@ def shell(
         elif sprite.status == "sleeping":
             typer.echo(f"Waking sprite '{name}'...")
             await sprite.wake()
-        await sprite.shell()
+        await sprite.attach()
 
     _run(_do())
 
@@ -141,7 +141,7 @@ def pull(
 def clone(
     name: str = typer.Argument(help="Source sprite name"),
     new_name: str = typer.Argument(help="Name for the clone"),
-    detach: bool = typer.Option(False, help="Clone without opening a shell"),
+    detach: bool = typer.Option(False, help="Clone without attaching to a shell"),
 ) -> None:
     """Fork a sprite from its latest snapshot."""
 
@@ -154,7 +154,7 @@ def clone(
             )
             return
         typer.echo(f"Cloned '{name}' -> '{new_name}'. Connecting...")
-        await new_sprite.shell()
+        await new_sprite.attach()
 
     _run(_do())
 
@@ -164,7 +164,7 @@ def checkpoint(
     name: str = typer.Argument(help="Sprite name"),
     label: str = typer.Argument(help="Checkpoint label"),
 ) -> None:
-    """Create a named checkpoint (prefer modal-sprite-ctl inside the shell)."""
+    """Create a named checkpoint (prefer modal-sprite-ctl from inside the sprite)."""
 
     async def _do() -> None:
         from modal_sprite import sandbox_manager as sm

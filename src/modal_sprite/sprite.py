@@ -17,7 +17,7 @@ from modal_sprite.errors import SpriteNotFoundError, SpriteStateError
 from modal_sprite.monitor import SpriteMonitor
 from modal_sprite.registry import SpriteRegistry
 from modal_sprite.state import CheckpointInfo, SpriteMetadata, SpriteState
-from modal_sprite.terminal import run_shell_loop
+from modal_sprite.terminal import run_attach_loop
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +149,11 @@ class Sprite:
     # Core operations
     # ------------------------------------------------------------------
 
-    async def shell(self) -> None:
-        """Open an interactive shell with reconnect-on-pending-action loop."""
+    async def attach(self) -> None:
+        """Attach to an interactive PTY shell with reconnect-on-pending-action loop."""
         self._stop_monitor()
-        await run_shell_loop(self._name, self._registry, self._app)
-        # Refresh metadata after shell exits
+        await run_attach_loop(self._name, self._registry, self._app)
+        # Refresh metadata after the attach session exits
         meta = await self._registry.get(self._name)
         if meta is not None:
             self._metadata = meta
