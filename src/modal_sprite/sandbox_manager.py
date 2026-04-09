@@ -32,6 +32,7 @@ def _get_base_image() -> Image:
                 "npm install -g @anthropic-ai/claude-code @openai/codex",
             )
             .uv_pip_install("modal")
+            .env({"IS_SANDBOX": "1"})
         )
     return _BASE_IMAGE
 
