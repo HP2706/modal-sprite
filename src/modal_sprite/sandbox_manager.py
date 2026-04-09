@@ -25,7 +25,7 @@ def _get_base_image() -> Image:
     if _BASE_IMAGE is None:
         _BASE_IMAGE = (
             Image.debian_slim()
-            .apt_install("curl", "git")
+            .apt_install("curl", "git", "socat")
             .run_commands(
                 "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
                 "apt-get install -y nodejs",

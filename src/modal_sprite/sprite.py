@@ -15,6 +15,7 @@ from modal_sprite import sandbox_manager as sm
 from modal_sprite.config import SpriteConfig
 from modal_sprite.errors import SpriteNotFoundError, SpriteStateError
 from modal_sprite.monitor import SpriteMonitor
+from modal_sprite.port_forward import Forward
 from modal_sprite.registry import SpriteRegistry
 from modal_sprite.state import CheckpointInfo, SpriteMetadata, SpriteState
 from modal_sprite.terminal import run_attach_loop
@@ -149,10 +150,14 @@ class Sprite:
     # Core operations
     # ------------------------------------------------------------------
 
-    async def attach(self) -> None:
-        """Attach to an interactive PTY shell with reconnect-on-pending-action loop."""
+    async def attach(self, forwards: list[Forward] | None = None) -> None:
+        """Attach to an interactive PTY shell with reconnect-on-pending-action loop.
+
+        If *forwards* is provided, those local→sandbox TCP forwards stay
+        active for the lifetime of the attach session.
+        """
         self._stop_monitor()
-        await run_attach_loop(self._name, self._registry, self._app)
+        await run_attach_loop(self._name, self._registry, self._app, forwards=forwards)
         # Refresh metadata after the attach session exits
         meta = await self._registry.get(self._name)
         if meta is not None:

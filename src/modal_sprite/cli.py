@@ -8,7 +8,19 @@ import modal
 import typer
 
 from modal_sprite.config import SpriteConfig
+from modal_sprite.port_forward import Forward, parse_forward
 from modal_sprite.sprite import Sprite
+
+
+def _parse_forwards(specs: list[str]) -> list[Forward]:
+    """Parse a list of ``-L`` specs from the CLI into :class:`Forward`s."""
+    return [parse_forward(s) for s in specs]
+
+
+_FORWARD_HELP = (
+    "Forward localhost:LOCAL to sandbox:REMOTE for the attach session. "
+    "Format: LOCAL or LOCAL:REMOTE. Repeatable."
+)
 
 app = typer.Typer(
     name="modal-sprite",
@@ -33,6 +45,7 @@ def create(
     workdir: str = typer.Option("/root", help="Working directory"),
     base_image_id: Optional[str] = typer.Option(None, help="Base image ID to start from"),
     detach: bool = typer.Option(False, help="Create without attaching to a shell"),
+    forward: list[str] = typer.Option([], "-L", "--forward", help=_FORWARD_HELP),
 ) -> None:
     """Create a new sprite and attach to an interactive shell."""
     cfg = SpriteConfig(
@@ -43,6 +56,7 @@ def create(
         idle_timeout=idle_timeout,
         workdir=workdir,
     )
+    forwards = _parse_forwards(forward)
 
     async def _do() -> None:
         sprite = await Sprite.create(name, config=cfg, base_image_id=base_image_id)
@@ -50,7 +64,7 @@ def create(
             typer.echo(f"Sprite '{name}' created (sandbox: {sprite._metadata.sandbox_id})")
             return
         typer.echo(f"Sprite '{name}' created. Connecting...")
-        await sprite.attach()
+        await sprite.attach(forwards=forwards)
 
     _run(_do())
 
@@ -59,8 +73,10 @@ def create(
 def attach(
     name: str = typer.Argument(help="Sprite name"),
     version: Optional[str] = typer.Option(None, help="Checkpoint version to restore into"),
+    forward: list[str] = typer.Option([], "-L", "--forward", help=_FORWARD_HELP),
 ) -> None:
     """Attach to a sprite's interactive shell. Wakes the sprite if sleeping."""
+    forwards = _parse_forwards(forward)
 
     async def _do() -> None:
         sprite = await Sprite.get(name)
@@ -70,7 +86,7 @@ def attach(
         elif sprite.status == "sleeping":
             typer.echo(f"Waking sprite '{name}'...")
             await sprite.wake()
-        await sprite.attach()
+        await sprite.attach(forwards=forwards)
 
     _run(_do())
 
@@ -142,8 +158,10 @@ def clone(
     name: str = typer.Argument(help="Source sprite name"),
     new_name: str = typer.Argument(help="Name for the clone"),
     detach: bool = typer.Option(False, help="Clone without attaching to a shell"),
+    forward: list[str] = typer.Option([], "-L", "--forward", help=_FORWARD_HELP),
 ) -> None:
     """Fork a sprite from its latest snapshot."""
+    forwards = _parse_forwards(forward)
 
     async def _do() -> None:
         sprite = await Sprite.get(name)
@@ -154,7 +172,7 @@ def clone(
             )
             return
         typer.echo(f"Cloned '{name}' -> '{new_name}'. Connecting...")
-        await new_sprite.attach()
+        await new_sprite.attach(forwards=forwards)
 
     _run(_do())
 

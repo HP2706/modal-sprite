@@ -18,6 +18,7 @@ from modal import Image
 
 from modal_sprite import sandbox_manager as sm
 from modal_sprite.monitor import SpriteMonitor
+from modal_sprite.port_forward import Forward, PortForwarder
 from modal_sprite.registry import SpriteRegistry
 from modal_sprite.state import SpriteState
 
@@ -59,11 +60,17 @@ async def run_attach_loop(
     sprite_name: str,
     registry: SpriteRegistry,
     app: object,
+    forwards: list[Forward] | None = None,
 ) -> None:
     """Run the interactive attach session with automatic reconnection.
 
     This is the core loop that ``sprite create``, ``sprite attach``, etc. call.
+
+    If *forwards* is non-empty, a :class:`PortForwarder` is started for the
+    duration of each sandbox iteration. In-flight connections are dropped on
+    reconnect; local listeners are rebound on the new sandbox.
     """
+    forwards = forwards or []
     while True:
         metadata = await registry.get(sprite_name)
         assert metadata is not None, f"Sprite '{sprite_name}' not found"
@@ -118,16 +125,25 @@ async def run_attach_loop(
         )
         monitor.start()
 
-        # Open interactive PTY shell
-        process = await sandbox.exec.aio(
-            "bash",
-            pty=True,
-            env=env,
-        )
-        await process.attach.aio()
+        # Bind local port forwards (if any) for the duration of this session
+        forwarder: PortForwarder | None = None
+        if forwards:
+            forwarder = PortForwarder(sandbox=sandbox, forwards=forwards)
+            await forwarder.start()
 
-        # Stop the monitor now that the shell has exited
-        monitor.stop()
+        try:
+            # Open interactive PTY shell
+            process = await sandbox.exec.aio(
+                "bash",
+                pty=True,
+                env=env,
+            )
+            await process.attach.aio()
+        finally:
+            if forwarder is not None:
+                await forwarder.stop()
+            # Stop the monitor now that the shell has exited
+            monitor.stop()
 
         # Shell exited -- check registry for pending action
         metadata = await registry.get(sprite_name)
